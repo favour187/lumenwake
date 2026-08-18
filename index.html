@@ -3,25 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#05080d" />
+  <meta name="theme-color" content="#1a140c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
   <title>LUMENWAKE</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
   <link rel="preload" href="assets/title_art.jpg" as="image" />
   <link rel="modulepreload" href="./vendor/three.module.js" />
-  <link rel="modulepreload" href="./game.js" />
 </head>
 <body>
   <div id="rotate">
     <img src="assets/ui_logo.jpg" alt="" />
-    <p>Turn your device <b>landscape</b></p>
+    <p>Hold your phone <b>upright</b></p>
   </div>
-
   <div id="app">
     <canvas id="c"></canvas>
-
     <section id="splash" class="layer">
       <img class="splash-art" src="assets/title_art.jpg" alt="" />
       <div class="splash-veil"></div>
@@ -29,14 +25,13 @@
         <img class="logo-lg" src="assets/ui_logo.jpg" alt="" />
         <p class="kicker">Reverie Hacks 2026</p>
         <h1>LUMENWAKE</h1>
-        <p class="line">A dream is dying. Run.</p>
+        <p class="line">The road never ends. The ghost never stops.</p>
         <div class="loadbox">
           <div class="loadbar"><span id="loadFill"></span></div>
-          <p id="loadText">Waking the lantern… 0%</p>
+          <p id="loadText">Laying the road… 0%</p>
         </div>
       </div>
     </section>
-
     <section id="menu" class="layer hidden">
       <img class="splash-art" src="assets/title_art.jpg" alt="" />
       <div class="splash-veil"></div>
@@ -44,20 +39,18 @@
         <div class="menu-card">
           <img class="logo-md" src="assets/ui_logo.jpg" alt="" />
           <h2>LUMENWAKE</h2>
-          <p class="tag">The road of Reverie never stops.</p>
-          <p class="lore">You auto-run. The Night Wraith is behind you. Swipe the dream and don’t look back.</p>
+          <p class="tag">Run the sunlit road of Reverie.</p>
+          <p class="lore">A temple ghost is at your back. Jump fallen logs, slide under gates, dodge lion statues, grab soul idols. Don’t get caught.</p>
           <button type="button" id="playBtn">RUN</button>
         </div>
         <ul class="how">
-          <li><b>← →</b> change lane · swipe</li>
-          <li><b>↑</b> jump · swipe up / Space</li>
-          <li><b>↓</b> slide · swipe down</li>
-          <li><b>Turn</b> swipe at a bend or fall</li>
-          <li><b>Survive</b> the wraith is faster if you stumble</li>
+          <li><b>Swipe ← →</b> change lane</li>
+          <li><b>Swipe ↑</b> jump the log</li>
+          <li><b>Swipe ↓</b> slide the gate</li>
+          <li><b>Task</b> collect idols · survive the ghost</li>
         </ul>
       </div>
     </section>
-
     <div id="hud" class="hidden">
       <div class="brand">
         <img src="assets/ui_logo.jpg" alt="" />
@@ -69,37 +62,32 @@
       <div class="meters">
         <div class="hp-row"><img src="assets/heart.jpg" alt="" /><div class="bar"><span id="hpFill"></span></div></div>
         <div class="meta">
-          <span>DIST <b id="dist">0</b>m</span>
-          <span>MEM <b id="memCount">0</b></span>
-          <span>SCR <b id="score">0</b></span>
+          <span>M <b id="dist">0</b></span>
+          <span>IDOLS <b id="memCount">0</b></span>
+          <span><b id="score">0</b></span>
         </div>
       </div>
     </div>
-
     <div id="pads" class="hidden">
       <div class="lane-btns">
         <button type="button" class="pad" id="leftBtn">←</button>
         <button type="button" class="pad" id="rightBtn">→</button>
       </div>
       <div class="actions">
-        <button type="button" class="pad" id="slideBtn">SLIDE</button>
+        <button type="button" class="pad dim" id="slideBtn">SLIDE</button>
         <button type="button" class="pad gold" id="jumpBtn">JUMP</button>
       </div>
     </div>
-
     <section id="end" class="layer hidden">
       <div class="menu-card">
         <h2 id="endTitle">CAUGHT</h2>
         <p id="endText"></p>
-        <p class="scoreline">Final score <b id="endScore">0</b></p>
+        <p class="scoreline">Score <b id="endScore">0</b></p>
         <button type="button" id="againBtn">RUN AGAIN</button>
       </div>
     </section>
   </div>
-
-  <script type="importmap">
-  { "imports": { "three": "./vendor/three.module.js" } }
-  </script>
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
   <script type="module" src="game.js"></script>
 </body>
 </html>

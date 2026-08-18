@@ -10,17 +10,17 @@ const againBtn = document.getElementById('againBtn');
 const loadText = document.getElementById('loadText');
 const loadFill = document.getElementById('loadFill');
 
-const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 900;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !mobile, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
-renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.15 : 1.5));
+renderer.toneMappingExposure = 1.55;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x060a12);
-scene.fog = new THREE.FogExp2(0x081018, 0.022);
+scene.background = new THREE.Color(0x8ec6e8);
+scene.fog = new THREE.Fog(0xc9dceb, 18, 95);
 
-const camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 220);
+const camera = new THREE.PerspectiveCamera(68, 9 / 16, 0.1, 200);
 const clock = new THREE.Clock();
 
 function fit() {
@@ -32,11 +32,11 @@ function fit() {
 }
 fit();
 addEventListener('resize', fit);
-addEventListener('fullscreenchange', () => setTimeout(fit, 50));
+addEventListener('fullscreenchange', () => setTimeout(fit, 40));
 
 const loader = new THREE.TextureLoader();
-function load(p) {
-  return new Promise((res, rej) => {
+const load = (p) =>
+  new Promise((res, rej) => {
     loader.load(
       p,
       (t) => {
@@ -47,230 +47,198 @@ function load(p) {
       () => rej(new Error(p))
     );
   });
-}
 
 async function loadAll(paths) {
-  const n = paths.length;
   let d = 0;
   return Promise.all(
     paths.map((p) =>
       load(p).then((t) => {
         d += 1;
-        const pct = Math.round((d / n) * 100);
+        const pct = Math.round((d / paths.length) * 100);
         loadFill.style.width = pct + '%';
-        loadText.textContent = pct < 100 ? `Waking the lantern… ${pct}%` : 'Ready';
+        loadText.textContent = pct < 100 ? `Laying the road… ${pct}%` : 'Ready';
         return t;
       })
     )
   );
 }
 
-const LANE_X = [-2.15, 0, 2.15];
-const SEG_LEN = 10;
-const ROAD_W = 7.2;
+const LANE = [-2.4, 0, 2.4];
+const LEN = 12;
+const RW = 8.4;
 
-const state = {
-  ready: false,
-  playing: false,
-  hp: 100,
-  mem: 0,
-  score: 0,
-  dist: 0,
-  pulse: 0,
-};
-const runner = {
-  lane: 1,
-  x: 0,
-  y: 0,
-  s: 0,
-  yaw: 0,
-  vy: 0,
-  grounded: true,
-  slide: 0,
-  invuln: 0,
-  speed: 16,
-  turnLock: 0,
-};
+const state = { ready: false, playing: false, hp: 100, mem: 0, score: 0, dist: 0 };
+const run = { lane: 1, x: 0, y: 0, yaw: 0, vy: 0, grounded: true, slide: 0, inv: 0, speed: 17 };
 
-const pieces = [];
-const pickups = [];
-const hazards = [];
+const segs = [];
+const items = [];
 const facing = [];
-let cursor = { x: 0, y: 0, z: 0, yaw: 0 };
-let weaverGroup, lampLight, chaseWraith, pulseMesh, mats, tex;
+let cur = { x: 0, z: 0, yaw: 0 };
+let hero, ghost, sunLight, tex, mats;
 let audioCtx;
 
-function beep(freq, dur, type = 'sine', gain = 0.05) {
+function beep(f, d, t = 'sine', g = 0.05) {
   if (!audioCtx) return;
   const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = type;
-  o.frequency.value = freq;
-  g.gain.setValueAtTime(gain, audioCtx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
-  o.connect(g).connect(audioCtx.destination);
+  const a = audioCtx.createGain();
+  o.type = t;
+  o.frequency.value = f;
+  a.gain.setValueAtTime(g, audioCtx.currentTime);
+  a.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
+  o.connect(a).connect(audioCtx.destination);
   o.start();
-  o.stop(audioCtx.currentTime + dur);
+  o.stop(audioCtx.currentTime + d);
 }
 
-function goFullscreen() {
-  const el = document.documentElement;
-  const req = el.requestFullscreen || el.webkitRequestFullscreen;
-  try {
-    req?.call(el, { navigationUI: 'hide' })?.catch?.(() => {});
-  } catch {}
-  try {
-    screen.orientation?.lock?.('landscape').catch(() => {});
-  } catch {}
-}
-
-function glow(texMap, w, h) {
-  const s = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: texMap, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
-  );
-  s.scale.set(w, h, 1);
-  return s;
-}
-
-function cutout(texMap) {
+function cut(map) {
   return new THREE.ShaderMaterial({
-    uniforms: { map: { value: texMap } },
+    uniforms: { map: { value: map } },
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D map; varying vec2 vUv; void main(){
       vec4 c=texture2D(map,vUv); float lum=max(c.r,max(c.g,c.b));
-      float a=smoothstep(0.04,0.16,lum); if(a<0.08) discard; gl_FragColor=vec4(c.rgb,a);
+      float a=smoothstep(0.045,0.16,lum); if(a<0.09) discard; gl_FragColor=vec4(c.rgb*1.12,a);
     }`,
   });
 }
 
-function heading(yaw) {
-  return new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+function fwd(y) {
+  return new THREE.Vector3(Math.sin(y), 0, Math.cos(y));
 }
-function rightOf(yaw) {
-  return new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+function rgt(y) {
+  return new THREE.Vector3(Math.cos(y), 0, -Math.sin(y));
 }
 
-function addSegment(kind) {
-  const yaw0 = cursor.yaw;
-  let dYaw = 0;
-  if (kind === 'left') dYaw = Math.PI / 2;
-  if (kind === 'right') dYaw = -Math.PI / 2;
-  const yaw1 = yaw0 + dYaw;
-
-  const midYaw = yaw0 + dYaw * 0.5;
-  const fwd = heading(kind === 'straight' ? yaw0 : midYaw);
-  const pos = new THREE.Vector3(cursor.x, cursor.y, cursor.z).addScaledVector(fwd, SEG_LEN * 0.5);
+function addSeg(kind) {
+  const y0 = cur.yaw;
+  const turn = kind === 'left' ? Math.PI / 2 : kind === 'right' ? -Math.PI / 2 : 0;
+  const y1 = y0 + turn;
+  const mid = y0 + turn * 0.5;
+  const f = fwd(kind === 'straight' ? y0 : mid);
+  const pos = new THREE.Vector3(cur.x, 0, cur.z).addScaledVector(f, LEN * 0.5);
 
   const g = new THREE.Group();
-  const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROAD_W, SEG_LEN + 0.4),
-    mats.road
-  );
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(RW, LEN + 0.6, 1, 1), mats.road);
   road.rotation.x = -Math.PI / 2;
-  road.rotation.z = kind === 'straight' ? 0 : dYaw * 0.5;
   g.add(road);
 
-  const railL = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, SEG_LEN, 6), mats.rail);
-  const railR = railL.clone();
-  railL.rotation.z = Math.PI / 2;
-  railR.rotation.z = Math.PI / 2;
-  railL.position.set(-ROAD_W / 2 + 0.15, 0.12, 0);
-  railR.position.set(ROAD_W / 2 - 0.15, 0.12, 0);
-  railL.rotation.y = Math.PI / 2;
-  railR.rotation.y = Math.PI / 2;
-  g.add(railL, railR);
+  // lane paint
+  [-0.85, 0.85].forEach((ox) => {
+    const line = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.12, LEN),
+      new THREE.MeshBasicMaterial({ color: 0xfff2c4 })
+    );
+    line.rotation.x = -Math.PI / 2;
+    line.position.set(ox * 2.4, 0.02, 0);
+    g.add(line);
+  });
+
+  const wallH = 9;
+  const wall = new THREE.PlaneGeometry(LEN + 0.4, wallH);
+  const L = new THREE.Mesh(wall, mats.cliff);
+  const R = new THREE.Mesh(wall, mats.cliff);
+  L.position.set(-RW / 2 - 0.05, wallH / 2, 0);
+  R.position.set(RW / 2 + 0.05, wallH / 2, 0);
+  L.rotation.y = Math.PI / 2;
+  R.rotation.y = -Math.PI / 2;
+  g.add(L, R);
+
+  if (Math.random() < 0.55) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 6.2), cut(tex.pillar));
+    p.position.set((Math.random() < 0.5 ? -1 : 1) * (RW / 2 + 1.1), 3.0, (Math.random() - 0.5) * 4);
+    g.add(p);
+    facing.push(p);
+  }
 
   g.position.copy(pos);
-  g.rotation.y = kind === 'straight' ? yaw0 : midYaw;
+  g.rotation.y = kind === 'straight' ? y0 : mid;
   scene.add(g);
+  segs.push({ mesh: g, x: pos.x, z: pos.z, yaw: y1, kind });
 
-  const piece = { mesh: g, x: pos.x, y: pos.y, z: pos.z, yaw: kind === 'straight' ? yaw0 : yaw1, kind, s0: 0 };
-  pieces.push(piece);
-
-  cursor.x += fwd.x * SEG_LEN;
-  cursor.z += fwd.z * SEG_LEN;
-  cursor.yaw = yaw1;
-
-  if (kind === 'straight' && Math.random() < 0.55) {
-    const lane = Math.floor(Math.random() * 3);
-    const r = rightOf(yaw0);
-    const spot = pos.clone().addScaledVector(r, LANE_X[lane]);
-    if (Math.random() < 0.45) {
-      const orb = glow(tex.orb, 1.05, 1.05);
-      orb.position.copy(spot).setY(1.15);
-      scene.add(orb);
-      pickups.push({ mesh: orb, lane, taken: false, px: spot.x, pz: spot.z, py: 1.15 });
+  if (kind === 'straight' && Math.random() < 0.62) {
+    const lane = (Math.random() * 3) | 0;
+    const world = pos.clone().add(rgt(y0).multiplyScalar(LANE[lane]));
+    const roll = Math.random();
+    if (roll < 0.38) {
+      const idol = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), cut(tex.idol));
+      idol.position.set(world.x, 1.25, world.z);
+      scene.add(idol);
+      facing.push(idol);
+      items.push({ mesh: idol, lane, type: 'idol', used: false, x: world.x, z: world.z });
+    } else if (roll < 0.62) {
+      const log = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.15), cut(tex.log));
+      log.position.set(world.x, 0.7, world.z);
+      scene.add(log);
+      facing.push(log);
+      items.push({ mesh: log, lane, type: 'jump', used: false, x: world.x, z: world.z });
+    } else if (roll < 0.82) {
+      const gate = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 1.5), cut(tex.gate));
+      gate.position.set(world.x, 1.55, world.z);
+      scene.add(gate);
+      facing.push(gate);
+      items.push({ mesh: gate, lane, type: 'slide', used: false, x: world.x, z: world.z });
     } else {
-      const hz = Math.random() < 0.5 ? 'rock' : 'low';
-      const spr = new THREE.Mesh(
-        new THREE.PlaneGeometry(hz === 'rock' ? 1.8 : 2.4, hz === 'rock' ? 1.5 : 1.3),
-        cutout(hz === 'rock' ? tex.rock : tex.banner)
-      );
-      spr.position.copy(spot).setY(hz === 'low' ? 0.7 : 0.85);
-      scene.add(spr);
-      facing.push(spr);
-      hazards.push({ mesh: spr, lane, type: hz, hit: false, px: spot.x, pz: spot.z });
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.3), cut(tex.statue));
+      st.position.set(world.x, 1.15, world.z);
+      scene.add(st);
+      facing.push(st);
+      items.push({ mesh: st, lane, type: 'block', used: false, x: world.x, z: world.z });
     }
   }
 
-  if (Math.random() < 0.4) {
-    const tree = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.4), cutout(tex.tree));
-    const side = Math.random() < 0.5 ? -1 : 1;
-    tree.position.copy(pos).add(rightOf(yaw0).multiplyScalar(side * 5.4));
-    tree.position.y = 2.1;
-    scene.add(tree);
-    facing.push(tree);
-  }
+  cur.x += f.x * LEN;
+  cur.z += f.z * LEN;
+  cur.yaw = y1;
 }
 
-function seedPath() {
-  for (let i = 0; i < 8; i++) addSegment('straight');
-  for (let i = 0; i < 18; i++) {
+function seed() {
+  for (let i = 0; i < 10; i++) addSeg('straight');
+  for (let i = 0; i < 24; i++) {
     const r = Math.random();
-    if (r < 0.72) addSegment('straight');
-    else addSegment(r < 0.86 ? 'left' : 'right');
+    addSeg(r < 0.74 ? 'straight' : r < 0.87 ? 'left' : 'right');
   }
 }
 
-function pruneAndExtend() {
-  const px = weaverGroup.position.x;
-  const pz = weaverGroup.position.z;
-  while (pieces.length && Math.hypot(pieces[0].x - px, pieces[0].z - pz) > 55 && pieces.length > 14) {
-    const p = pieces.shift();
-    scene.remove(p.mesh);
+function extend() {
+  const p = hero.position;
+  while (segs.length > 16 && Math.hypot(segs[0].x - p.x, segs[0].z - p.z) > 50) {
+    scene.remove(segs.shift().mesh);
   }
-  const last = pieces[pieces.length - 1];
-  if (last && Math.hypot(last.x - px, last.z - pz) < 90) {
+  const last = segs[segs.length - 1];
+  if (last && Math.hypot(last.x - p.x, last.z - p.z) < 100) {
     const r = Math.random();
-    if (r < 0.7) addSegment('straight');
-    else addSegment(r < 0.85 ? 'left' : 'right');
+    addSeg(r < 0.72 ? 'straight' : r < 0.86 ? 'left' : 'right');
   }
 }
 
-function nearestRoad() {
-  let best = pieces[0],
-    bd = 1e9;
-  const p = weaverGroup.position;
-  for (const s of pieces) {
-    const d = (s.x - p.x) ** 2 + (s.z - p.z) ** 2;
-    if (d < bd) {
-      bd = d;
-      best = s;
+function near() {
+  let b = segs[0],
+    d = 1e9;
+  for (const s of segs) {
+    const q = (s.x - hero.position.x) ** 2 + (s.z - hero.position.z) ** 2;
+    if (q < d) {
+      d = q;
+      b = s;
     }
   }
-  return best;
+  return b;
 }
 
-function goFullscreenStart() {
-  goFullscreen();
+function fs() {
+  const el = document.documentElement;
+  try {
+    (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el, { navigationUI: 'hide' })?.catch?.(() => {});
+  } catch {}
+  try {
+    screen.orientation?.lock?.('portrait').catch(() => {});
+  } catch {}
 }
 
 function startGame() {
   if (!state.ready || state.playing) return;
-  goFullscreenStart();
+  fs();
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume?.();
@@ -280,76 +248,72 @@ function startGame() {
   hud.classList.remove('hidden');
   padsEl.classList.remove('hidden');
   state.playing = true;
-  setTimeout(fit, 80);
-  beep(240, 0.3, 'triangle', 0.05);
+  setTimeout(fit, 60);
+  beep(300, 0.2, 'triangle', 0.05);
 }
 
-playBtn.addEventListener('click', (e) => {
+playBtn.onclick = (e) => {
   e.preventDefault();
   startGame();
-});
-againBtn.addEventListener('click', () => location.reload());
+};
+againBtn.onclick = () => location.reload();
 
 function jump() {
-  if (!state.playing || !runner.grounded || runner.slide > 0) return;
-  runner.vy = 9.4;
-  runner.grounded = false;
-  beep(320, 0.08, 'square', 0.03);
+  if (!state.playing || !run.grounded || run.slide > 0) return;
+  run.vy = 10.2;
+  run.grounded = false;
+  beep(340, 0.07, 'square', 0.03);
 }
 function slide() {
-  if (!state.playing || !runner.grounded) return;
-  runner.slide = 0.55;
-  beep(140, 0.1, 'sawtooth', 0.03);
+  if (!state.playing || !run.grounded) return;
+  run.slide = 0.58;
+  beep(150, 0.08, 'sawtooth', 0.03);
 }
-function lane(dir) {
+function lane(d) {
   if (!state.playing) return;
-  runner.lane = Math.max(0, Math.min(2, runner.lane + dir));
-  beep(260, 0.05, 'sine', 0.03);
+  run.lane = Math.max(0, Math.min(2, run.lane + d));
 }
 
-document.getElementById('jumpBtn').addEventListener('pointerdown', (e) => {
+document.getElementById('jumpBtn').onpointerdown = (e) => {
   e.preventDefault();
   e.stopPropagation();
   jump();
-});
-document.getElementById('slideBtn').addEventListener('pointerdown', (e) => {
+};
+document.getElementById('slideBtn').onpointerdown = (e) => {
   e.preventDefault();
   e.stopPropagation();
   slide();
-});
-document.getElementById('leftBtn').addEventListener('pointerdown', (e) => {
+};
+document.getElementById('leftBtn').onpointerdown = (e) => {
   e.preventDefault();
   e.stopPropagation();
   lane(-1);
-});
-document.getElementById('rightBtn').addEventListener('pointerdown', (e) => {
+};
+document.getElementById('rightBtn').onpointerdown = (e) => {
   e.preventDefault();
   e.stopPropagation();
   lane(1);
-});
+};
 
-let swipe = null;
-canvas.addEventListener('pointerdown', (e) => {
-  swipe = { x: e.clientX, y: e.clientY };
+let sw = null;
+addEventListener('pointerdown', (e) => {
+  if (e.target.closest('button')) return;
+  sw = { x: e.clientX, y: e.clientY };
 });
-canvas.addEventListener('pointerup', (e) => {
-  if (!swipe || !state.playing) {
-    swipe = null;
-    return;
-  }
-  const dx = e.clientX - swipe.x;
-  const dy = e.clientY - swipe.y;
-  swipe = null;
-  if (Math.hypot(dx, dy) < 36) return;
+addEventListener('pointerup', (e) => {
+  if (!sw || !state.playing) return (sw = null);
+  const dx = e.clientX - sw.x,
+    dy = e.clientY - sw.y;
+  sw = null;
+  if (Math.hypot(dx, dy) < 28) return;
   if (Math.abs(dx) > Math.abs(dy)) lane(dx < 0 ? -1 : 1);
   else if (dy < 0) jump();
   else slide();
 });
-
 addEventListener('keydown', (e) => {
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') lane(-1);
   if (e.code === 'ArrowRight' || e.code === 'KeyD') lane(1);
-  if (e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'KeyW') {
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
     e.preventDefault();
     jump();
   }
@@ -359,18 +323,16 @@ addEventListener('keydown', (e) => {
   }
 });
 
-function endGame(caught) {
+function die(msg, title) {
   state.playing = false;
   padsEl.classList.add('hidden');
   document.getElementById('end').classList.remove('hidden');
-  document.getElementById('endTitle').textContent = caught ? 'CAUGHT' : 'THE DREAM FADES';
-  document.getElementById('endText').textContent = caught
-    ? 'The Night Wraith took the road. You ran far enough to be remembered.'
-    : 'You stepped off Reverie’s path. The lantern guttered.';
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endText').textContent = msg;
   document.getElementById('endScore').textContent = Math.floor(state.score);
 }
 
-function setHud() {
+function hudSync() {
   document.getElementById('hpFill').style.width = `${Math.max(0, state.hp)}%`;
   document.getElementById('memCount').textContent = state.mem;
   document.getElementById('score').textContent = Math.floor(state.score);
@@ -378,78 +340,60 @@ function setHud() {
 }
 
 async function boot() {
-  const [stone, moss, sky, lantern, orb, wraith, portal, tree, rock, banner, weaver, mote] = await loadAll([
-    'assets/tex_stone.jpg',
-    'assets/tex_moss.jpg',
+  const [road, cliff, sky, runner, ghostTex, log, gate, idol, pillar, statue] = await loadAll([
+    'assets/tex_road.jpg',
+    'assets/tex_cliff.jpg',
     'assets/sky.jpg',
-    'assets/lantern_sprite.jpg',
-    'assets/memory_orb.jpg',
-    'assets/wraith.jpg',
-    'assets/portal.jpg',
-    'assets/tree.jpg',
-    'assets/rock.jpg',
-    'assets/banner.jpg',
-    'assets/weaver.jpg',
-    'assets/mote.jpg',
+    'assets/runner.png',
+    'assets/ghost.png',
+    'assets/log.png',
+    'assets/gate.png',
+    'assets/idol.png',
+    'assets/pillar.png',
+    'assets/statue.png',
   ]);
-  [stone, moss].forEach((t) => {
+  [road, cliff].forEach((t) => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(1.4, 2.2);
   });
-  tex = { orb, rock, banner, tree, weaver, lantern, wraith, mote, portal };
+  road.repeat.set(2, 3);
+  cliff.repeat.set(2, 1);
+  tex = { runner, ghost: ghostTex, log, gate, idol, pillar, statue };
 
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(140, 20, 14), new THREE.MeshBasicMaterial({ map: sky, side: THREE.BackSide })));
-  scene.add(new THREE.HemisphereLight(0x6aa0c8, 0x1a1008, 0.65));
-  const moon = new THREE.DirectionalLight(0xc8d8ff, 0.7);
-  moon.position.set(-12, 30, 8);
-  scene.add(moon);
-
-  const water = new THREE.Mesh(
-    new THREE.CircleGeometry(160, 28),
-    new THREE.MeshStandardMaterial({ color: 0x08141c, metalness: 0.8, roughness: 0.22, transparent: true, opacity: 0.7 })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = -3.2;
-  scene.add(water);
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(120, 20, 14), new THREE.MeshBasicMaterial({ map: sky, side: THREE.BackSide })));
+  scene.add(new THREE.HemisphereLight(0xfff0d0, 0x6a4a28, 1.15));
+  sunLight = new THREE.DirectionalLight(0xfff3d2, 2.1);
+  sunLight.position.set(8, 22, 6);
+  scene.add(sunLight);
+  scene.add(new THREE.AmbientLight(0xffe8c8, 0.55));
 
   mats = {
-    road: new THREE.MeshStandardMaterial({ map: moss, roughness: 0.88 }),
-    rail: new THREE.MeshStandardMaterial({ map: stone, roughness: 0.5, metalness: 0.25 }),
+    road: new THREE.MeshStandardMaterial({
+      map: road,
+      roughness: 0.62,
+      metalness: 0.04,
+      emissive: new THREE.Color(0x4a3518),
+      emissiveIntensity: 0.22,
+    }),
+    cliff: new THREE.MeshStandardMaterial({ map: cliff, roughness: 0.8, emissive: 0x221408, emissiveIntensity: 0.12 }),
   };
 
-  seedPath();
+  seed();
 
-  weaverGroup = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.85), cutout(weaver));
-  const lamp = glow(lantern, 0.7, 0.9);
-  lamp.position.set(0.38, 0.28, 0.1);
-  weaverGroup.add(body, lamp);
+  hero = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 2.15), cut(runner));
+  hero.add(body);
   facing.push(body);
-  weaverGroup.position.set(0, 0, 2);
-  scene.add(weaverGroup);
+  hero.position.set(0, 1.05, 4);
+  scene.add(hero);
 
-  lampLight = new THREE.PointLight(0xffc56a, 7, 18, 1.3);
-  scene.add(lampLight);
+  ghost = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.4), cut(ghostTex));
+  ghost.position.set(0, 1.7, -4);
+  scene.add(ghost);
+  facing.push(ghost);
 
-  chaseWraith = glow(wraith, 3.4, 4.0);
-  chaseWraith.position.set(0, 2.2, -8);
-  scene.add(chaseWraith);
-
-  pulseMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 12, 10),
-    new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0 })
-  );
-  scene.add(pulseMesh);
-
-  for (let i = 0; i < 18; i++) {
-    const m = glow(mote, 0.5, 0.5);
-    m.position.set((Math.random() - 0.5) * 20, 1 + Math.random() * 6, Math.random() * 80);
-    scene.add(m);
-  }
-
-  const gate = glow(portal, 5, 5);
-  gate.position.set(0, 2.4, 6);
-  scene.add(gate);
+  const fill = new THREE.PointLight(0xffe0a0, 4.5, 22);
+  fill.position.set(0, 4, 6);
+  scene.add(fill);
 
   state.ready = true;
   loadFill.style.width = '100%';
@@ -459,114 +403,100 @@ async function boot() {
   setTimeout(() => {
     splash.classList.add('hidden');
     menu.classList.remove('hidden');
-  }, 350);
+  }, 280);
 }
 
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.033);
-  if (state.playing) step(dt);
-
-  if (weaverGroup) {
+  if (state.playing) tick(dt);
+  if (hero) {
     facing.forEach((m) => {
       const p = camera.position.clone();
       p.y = m.getWorldPosition(new THREE.Vector3()).y;
       m.lookAt(p);
     });
-    lampLight.position.copy(weaverGroup.position).add(new THREE.Vector3(0.2, 1.1, 0.2));
-    const back = heading(runner.yaw).multiplyScalar(-7.2);
-    const camT = weaverGroup.position.clone().add(back).add(new THREE.Vector3(0, 3.4, 0));
-    camera.position.lerp(camT, 1 - Math.pow(0.0008, dt));
-    const look = weaverGroup.position.clone().add(heading(runner.yaw).multiplyScalar(8));
-    look.y += 1.1;
+    const back = fwd(run.yaw).multiplyScalar(-6.4);
+    const cam = hero.position.clone().add(back);
+    cam.y = 3.8;
+    camera.position.lerp(cam, 1 - Math.pow(0.0007, dt));
+    const look = hero.position.clone().add(fwd(run.yaw).multiplyScalar(10));
+    look.y = 1.3;
     camera.lookAt(look);
-
-    const chase = weaverGroup.position.clone().add(heading(runner.yaw).multiplyScalar(-5.5));
-    chase.y = 1.8 + Math.sin(performance.now() * 0.006) * 0.2;
-    chaseWraith.position.lerp(chase, 0.12);
+    const gh = hero.position.clone().add(fwd(run.yaw).multiplyScalar(-4.6));
+    gh.y = 1.7 + Math.sin(performance.now() * 0.007) * 0.15;
+    ghost.position.lerp(gh, 0.14);
   }
   renderer.render(scene, camera);
-  if (state.playing) setHud();
+  if (state.playing) hudSync();
 }
 
-function step(dt) {
-  runner.speed = Math.min(28, 15.5 + state.dist * 0.012);
-  const road = nearestRoad();
+function tick(dt) {
+  run.speed = Math.min(26, 16.5 + state.dist * 0.014);
+  const road = near();
   if (!road) return;
-
-  const wantYaw = road.yaw;
-  let dy = wantYaw - runner.yaw;
+  let dy = road.yaw - run.yaw;
   while (dy > Math.PI) dy -= Math.PI * 2;
   while (dy < -Math.PI) dy += Math.PI * 2;
-  runner.yaw += dy * Math.min(1, dt * 6);
+  run.yaw += dy * Math.min(1, dt * 5.5);
 
-  const fwd = heading(runner.yaw);
-  const rgt = rightOf(runner.yaw);
-  weaverGroup.position.addScaledVector(fwd, runner.speed * dt);
-  runner.x += (LANE_X[runner.lane] - runner.x) * Math.min(1, dt * 12);
-  const base = weaverGroup.position.clone();
-  // re-project onto road center then apply lane
-  const toC = new THREE.Vector3(road.x - weaverGroup.position.x, 0, road.z - weaverGroup.position.z);
-  const along = toC.dot(fwd);
-  const center = new THREE.Vector3(road.x, 0, road.z).addScaledVector(fwd, -along * 0.15);
-  weaverGroup.position.x = center.x + rgt.x * runner.x;
-  weaverGroup.position.z = center.z + rgt.z * runner.x;
+  const f = fwd(run.yaw);
+  const r = rgt(run.yaw);
+  hero.position.addScaledVector(f, run.speed * dt);
+  run.x += (LANE[run.lane] - run.x) * Math.min(1, dt * 13);
 
-  runner.vy -= 28 * dt;
-  runner.y += runner.vy * dt;
-  if (runner.y <= 0) {
-    runner.y = 0;
-    runner.vy = 0;
-    runner.grounded = true;
+  const to = new THREE.Vector3(road.x - hero.position.x, 0, road.z - hero.position.z);
+  const along = to.dot(f);
+  const center = new THREE.Vector3(road.x, 0, road.z).addScaledVector(f, -along * 0.2);
+  hero.position.x = center.x + r.x * run.x;
+  hero.position.z = center.z + r.z * run.x;
+
+  run.vy -= 30 * dt;
+  run.y += run.vy * dt;
+  if (run.y <= 0) {
+    run.y = 0;
+    run.vy = 0;
+    run.grounded = true;
   }
-  runner.slide = Math.max(0, runner.slide - dt);
-  runner.invuln -= dt;
-  weaverGroup.position.y = 0.95 + runner.y - (runner.slide > 0 ? 0.45 : 0);
-  weaverGroup.scale.setScalar(runner.slide > 0 ? 0.78 : 1);
-  weaverGroup.rotation.y = runner.yaw;
+  run.slide = Math.max(0, run.slide - dt);
+  run.inv -= dt;
+  hero.position.y = 1.05 + run.y - (run.slide > 0 ? 0.5 : 0);
+  hero.scale.setScalar(run.slide > 0 ? 0.75 : 1);
+  hero.rotation.y = run.yaw;
 
-  state.dist += runner.speed * dt;
-  state.score += runner.speed * dt * 4;
+  state.dist += run.speed * dt * 0.55;
+  state.score += run.speed * dt * 5;
 
-  const px = weaverGroup.position.x;
-  const pz = weaverGroup.position.z;
-
-  pickups.forEach((o) => {
-    if (o.taken) return;
-    o.mesh.position.y = o.py + Math.sin(performance.now() * 0.006) * 0.15;
-    if (o.lane === runner.lane && Math.hypot(o.px - px, o.pz - pz) < 1.6 && runner.y < 1.4) {
-      o.taken = true;
-      o.mesh.visible = false;
+  const hx = hero.position.x,
+    hz = hero.position.z;
+  items.forEach((it) => {
+    if (it.used) return;
+    if (it.lane !== run.lane) return;
+    if (Math.hypot(it.x - hx, it.z - hz) > 1.45) return;
+    if (it.type === 'idol') {
+      it.used = true;
+      it.mesh.visible = false;
       state.mem += 1;
-      state.score += 250;
-      state.hp = Math.min(100, state.hp + 6);
-      beep(720, 0.12, 'sine', 0.06);
+      state.score += 200;
+      state.hp = Math.min(100, state.hp + 5);
+      beep(780, 0.1, 'sine', 0.06);
+      return;
     }
+    if (run.inv > 0) return;
+    if (it.type === 'jump' && run.y > 1.05) return;
+    if (it.type === 'slide' && run.slide > 0) return;
+    it.used = true;
+    state.hp -= 24;
+    run.inv = 0.85;
+    run.speed *= 0.7;
+    beep(70, 0.2, 'sawtooth', 0.07);
   });
 
-  hazards.forEach((h) => {
-    if (h.hit || runner.invuln > 0) return;
-    if (h.lane !== runner.lane) return;
-    if (Math.hypot(h.px - px, h.pz - pz) > 1.35) return;
-    if (h.type === 'rock' && runner.y > 1.15) return;
-    if (h.type === 'low' && runner.slide > 0) return;
-    h.hit = true;
-    state.hp -= 22;
-    runner.invuln = 0.9;
-    runner.speed *= 0.72;
-    beep(80, 0.22, 'sawtooth', 0.07);
-  });
-
-  const off = Math.abs(runner.x) > 3.5 && runner.grounded;
-  if (off) {
-    state.hp -= 40 * dt;
-  }
-  if (state.hp <= 0) endGame(true);
-
-  pruneAndExtend();
+  if (state.hp <= 0) die('The temple ghost took the road. You ran far enough to be a story.', 'CAUGHT');
+  extend();
 }
 
-boot().catch((err) => {
-  console.error(err);
-  if (loadText) loadText.textContent = 'Could not load. Refresh.';
+boot().catch((e) => {
+  console.error(e);
+  loadText.textContent = 'Could not load. Refresh.';
 });

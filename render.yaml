@@ -12,4 +12,4 @@ services:
     headers:
       - path: /*
         name: Cache-Control
-        value: public, max-age=300
+        value: public, max-age=86400

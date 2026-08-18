@@ -8,6 +8,9 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <title>LUMENWAKE</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="preload" href="assets/title_art.jpg" as="image" />
+  <link rel="modulepreload" href="./vendor/three.module.js" />
+  <link rel="modulepreload" href="./game.js" />
 </head>
 <body>
   <div id="rotate">
@@ -63,7 +66,7 @@
         </div>
       </div>
       <div class="meters">
-        <div class="hp-row"><img src="assets/heart.png" alt="" /><div class="bar"><span id="hpFill"></span></div></div>
+        <div class="hp-row"><img src="assets/heart.jpg" alt="" /><div class="bar"><span id="hpFill"></span></div></div>
         <div class="meta">
           <span>MEM <b id="memCount">0</b>/7</span>
           <span>SCR <b id="score">0</b></span>
@@ -92,7 +95,7 @@
   </div>
 
   <script type="importmap">
-  { "imports": { "three": "https://unpkg.com/three@0.169.0/build/three.module.js" } }
+  { "imports": { "three": "./vendor/three.module.js" } }
   </script>
   <script type="module" src="game.js"></script>
 </body>

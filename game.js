@@ -306,15 +306,15 @@ async function boot() {
       'assets/tex_stone.jpg',
       'assets/tex_moss.jpg',
       'assets/sky.jpg',
-      'assets/lantern_sprite.png',
-      'assets/memory_orb.png',
-      'assets/wraith.png',
-      'assets/portal.png',
-      'assets/tree.png',
-      'assets/rock.png',
-      'assets/bridge.png',
-      'assets/weaver.png',
-      'assets/mote.png',
+      'assets/lantern_sprite.jpg',
+      'assets/memory_orb.jpg',
+      'assets/wraith.jpg',
+      'assets/portal.jpg',
+      'assets/tree.jpg',
+      'assets/rock.jpg',
+      'assets/bridge.jpg',
+      'assets/weaver.jpg',
+      'assets/mote.jpg',
     ]);
 
   [stone, moss].forEach((t) => {
@@ -552,5 +552,8 @@ boot().catch((err) => {
   startBtn.disabled = false;
   startBtn.textContent = 'RETRY';
   loadNote.textContent = 'Could not finish loading. Tap retry.';
+  startBtn.onclick = () => location.reload();
+});
+ot finish loading. Tap retry.';
   startBtn.onclick = () => location.reload();
 });

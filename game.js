@@ -68,7 +68,7 @@ const LEN = 12;
 const RW = 8.4;
 
 const state = { ready: false, playing: false, hp: 100, mem: 0, score: 0, dist: 0 };
-const run = { lane: 1, x: 0, y: 0, yaw: 0, vy: 0, grounded: true, slide: 0, inv: 0, speed: 17 };
+const run = { lane: 1, x: 0, y: 0, yaw: 0, vy: 0, grounded: true, slide: 0, inv: 0, speed: 18, si: 0, t: 0 };
 
 const segs = [];
 const items = [];
@@ -112,85 +112,80 @@ function rgt(y) {
 }
 
 function addSeg(kind) {
-  const y0 = cur.yaw;
-  const turn = kind === 'left' ? Math.PI / 2 : kind === 'right' ? -Math.PI / 2 : 0;
-  const y1 = y0 + turn;
-  const mid = y0 + turn * 0.5;
-  const f = fwd(kind === 'straight' ? y0 : mid);
-  const pos = new THREE.Vector3(cur.x, 0, cur.z).addScaledVector(f, LEN * 0.5);
+  if (kind === 'left') cur.yaw += Math.PI / 2;
+  if (kind === 'right') cur.yaw -= Math.PI / 2;
+  const y = cur.yaw;
+  const f = fwd(y);
+  const sx = cur.x;
+  const sz = cur.z;
+  const ex = sx + f.x * LEN;
+  const ez = sz + f.z * LEN;
+  const pos = new THREE.Vector3((sx + ex) / 2, 0, (sz + ez) / 2);
 
   const g = new THREE.Group();
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(RW, LEN + 0.6, 1, 1), mats.road);
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(RW, LEN + 0.35, 1, 1), mats.road);
   road.rotation.x = -Math.PI / 2;
   g.add(road);
 
-  // lane paint
-  [-0.85, 0.85].forEach((ox) => {
-    const line = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.12, LEN),
-      new THREE.MeshBasicMaterial({ color: 0xfff2c4 })
-    );
+  [-1, 1].forEach((s) => {
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.14, LEN), new THREE.MeshBasicMaterial({ color: 0xfff4cc }));
     line.rotation.x = -Math.PI / 2;
-    line.position.set(ox * 2.4, 0.02, 0);
+    line.position.set(s * 2.4, 0.03, 0);
     g.add(line);
   });
 
   const wallH = 9;
-  const wall = new THREE.PlaneGeometry(LEN + 0.4, wallH);
-  const L = new THREE.Mesh(wall, mats.cliff);
-  const R = new THREE.Mesh(wall, mats.cliff);
-  L.position.set(-RW / 2 - 0.05, wallH / 2, 0);
-  R.position.set(RW / 2 + 0.05, wallH / 2, 0);
-  L.rotation.y = Math.PI / 2;
-  R.rotation.y = -Math.PI / 2;
-  g.add(L, R);
+  const wall = new THREE.PlaneGeometry(LEN + 0.2, wallH);
+  const Lw = new THREE.Mesh(wall, mats.cliff);
+  const Rw = new THREE.Mesh(wall, mats.cliff);
+  Lw.position.set(-RW / 2, wallH / 2, 0);
+  Rw.position.set(RW / 2, wallH / 2, 0);
+  Lw.rotation.y = Math.PI / 2;
+  Rw.rotation.y = -Math.PI / 2;
+  g.add(Lw, Rw);
 
-  if (Math.random() < 0.55) {
+  if (tex && Math.random() < 0.5) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 6.2), cut(tex.pillar));
-    p.position.set((Math.random() < 0.5 ? -1 : 1) * (RW / 2 + 1.1), 3.0, (Math.random() - 0.5) * 4);
+    p.position.set((Math.random() < 0.5 ? -1 : 1) * (RW / 2 + 1.05), 3.0, 0);
     g.add(p);
     facing.push(p);
   }
 
   g.position.copy(pos);
-  g.rotation.y = kind === 'straight' ? y0 : mid;
+  g.rotation.y = y;
   scene.add(g);
-  segs.push({ mesh: g, x: pos.x, z: pos.z, yaw: y1, kind });
+  segs.push({ mesh: g, sx, sz, ex, ez, yaw: y, len: LEN, kind });
 
-  if (kind === 'straight' && Math.random() < 0.62) {
+  if (kind === 'straight' && tex && Math.random() < 0.58) {
     const lane = (Math.random() * 3) | 0;
-    const world = pos.clone().add(rgt(y0).multiplyScalar(LANE[lane]));
+    const mid = pos.clone().add(rgt(y).multiplyScalar(LANE[lane]));
     const roll = Math.random();
-    if (roll < 0.38) {
-      const idol = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), cut(tex.idol));
-      idol.position.set(world.x, 1.25, world.z);
-      scene.add(idol);
-      facing.push(idol);
-      items.push({ mesh: idol, lane, type: 'idol', used: false, x: world.x, z: world.z });
-    } else if (roll < 0.62) {
-      const log = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.15), cut(tex.log));
-      log.position.set(world.x, 0.7, world.z);
-      scene.add(log);
-      facing.push(log);
-      items.push({ mesh: log, lane, type: 'jump', used: false, x: world.x, z: world.z });
-    } else if (roll < 0.82) {
-      const gate = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 1.5), cut(tex.gate));
-      gate.position.set(world.x, 1.55, world.z);
-      scene.add(gate);
-      facing.push(gate);
-      items.push({ mesh: gate, lane, type: 'slide', used: false, x: world.x, z: world.z });
+    let mesh, type, h;
+    if (roll < 0.4) {
+      mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), cut(tex.idol));
+      type = 'idol';
+      h = 1.25;
+    } else if (roll < 0.65) {
+      mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.15), cut(tex.log));
+      type = 'jump';
+      h = 0.7;
+    } else if (roll < 0.85) {
+      mesh = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 1.5), cut(tex.gate));
+      type = 'slide';
+      h = 1.55;
     } else {
-      const st = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.3), cut(tex.statue));
-      st.position.set(world.x, 1.15, world.z);
-      scene.add(st);
-      facing.push(st);
-      items.push({ mesh: st, lane, type: 'block', used: false, x: world.x, z: world.z });
+      mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.3), cut(tex.statue));
+      type = 'block';
+      h = 1.15;
     }
+    mesh.position.set(mid.x, h, mid.z);
+    scene.add(mesh);
+    facing.push(mesh);
+    items.push({ mesh, lane, type, used: false, x: mid.x, z: mid.z });
   }
 
-  cur.x += f.x * LEN;
-  cur.z += f.z * LEN;
-  cur.yaw = y1;
+  cur.x = ex;
+  cur.z = ez;
 }
 
 function seed() {
@@ -202,14 +197,14 @@ function seed() {
 }
 
 function extend() {
-  const p = hero.position;
-  while (segs.length > 16 && Math.hypot(segs[0].x - p.x, segs[0].z - p.z) > 50) {
-    scene.remove(segs.shift().mesh);
+  while (run.si > 4 && segs.length > 18) {
+    const gone = segs.shift();
+    scene.remove(gone.mesh);
+    run.si -= 1;
   }
-  const last = segs[segs.length - 1];
-  if (last && Math.hypot(last.x - p.x, last.z - p.z) < 100) {
+  while (segs.length - run.si < 16) {
     const r = Math.random();
-    addSeg(r < 0.72 ? 'straight' : r < 0.86 ? 'left' : 'right');
+    addSeg(r < 0.76 ? 'straight' : r < 0.88 ? 'left' : 'right');
   }
 }
 
@@ -498,5 +493,8 @@ function tick(dt) {
 
 boot().catch((e) => {
   console.error(e);
+  loadText.textContent = 'Could not load. Refresh.';
+});
+;
   loadText.textContent = 'Could not load. Refresh.';
 });

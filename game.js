@@ -5,50 +5,72 @@ const stage = document.getElementById('stage');
 const startBtn = document.getElementById('startBtn');
 const againBtn = document.getElementById('againBtn');
 const loadNote = document.getElementById('loadNote');
-
-startBtn.disabled = true;
-startBtn.textContent = 'LOADING…';
+const loadBar = document.getElementById('loadBar');
 
 function sizeOf() {
   const r = stage.getBoundingClientRect();
-  return { w: Math.max(2, r.width), h: Math.max(2, r.height) };
+  return { w: Math.max(2, r.width || innerWidth), h: Math.max(2, r.height || innerHeight) };
 }
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.shadowMap.enabled = true;
+const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 900;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !mobile, powerPreference: 'high-performance' });
+renderer.shadowMap.enabled = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.12;
+renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.15 : 1.5));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060a12);
 scene.fog = new THREE.FogExp2(0x081018, 0.018);
 
-const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.1, 280);
+const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.1, 220);
 const clock = new THREE.Clock();
 
 function fit() {
   const { w, h } = sizeOf();
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-fit();
 addEventListener('resize', fit);
 
 const loader = new THREE.TextureLoader();
-const load = (p) =>
-  new Promise((res, rej) => {
+const cache = {};
+function load(p) {
+  if (cache[p]) return cache[p];
+  cache[p] = new Promise((res, rej) => {
     loader.load(
       p,
       (t) => {
         t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = 2;
+        t.generateMipmaps = true;
         res(t);
       },
       undefined,
       () => rej(new Error(p))
     );
   });
+  return cache[p];
+}
+
+let done = 0;
+const TOTAL = 12;
+function tickLoad() {
+  done += 1;
+  const pct = Math.min(100, Math.round((done / TOTAL) * 100));
+  loadBar.style.width = pct + '%';
+  loadNote.textContent = pct < 100 ? `Weaving the isles… ${pct}%` : 'Ready';
+}
+
+async function loadAll(paths) {
+  const out = [];
+  for (const p of paths) {
+    out.push(await load(p));
+    tickLoad();
+  }
+  return out;
+}
 
 const keys = {};
 const stick = { x: 0, y: 0, down: false };
@@ -105,15 +127,15 @@ function startGame() {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume?.();
   } catch {}
-  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('menu').classList.add('hidden');
+  stage.classList.remove('hidden');
+  fit();
   state.playing = true;
-  beep(220, 0.4, 'triangle', 0.05);
-  beep(330, 0.5, 'sine', 0.04);
+  beep(220, 0.35, 'triangle', 0.05);
 }
 
 startBtn.addEventListener('click', (e) => {
   e.preventDefault();
-  e.stopPropagation();
   startGame();
 });
 againBtn.addEventListener('click', (e) => {
@@ -122,13 +144,9 @@ againBtn.addEventListener('click', (e) => {
 });
 
 function glowSprite(tex, w, h) {
-  const mat = new THREE.SpriteMaterial({
-    map: tex,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const s = new THREE.Sprite(mat);
+  const s = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+  );
   s.scale.set(w, h, 1);
   return s;
 }
@@ -139,22 +157,11 @@ function cutoutMat(tex) {
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: `
-      uniform sampler2D map;
-      varying vec2 vUv;
-      void main() {
-        vec4 c = texture2D(map, vUv);
-        float lum = max(c.r, max(c.g, c.b));
-        float a = smoothstep(0.035, 0.14, lum);
-        if (a < 0.08) discard;
-        gl_FragColor = vec4(c.rgb, a);
-      }`,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D map; varying vec2 vUv; void main(){
+      vec4 c=texture2D(map,vUv); float lum=max(c.r,max(c.g,c.b));
+      float a=smoothstep(0.035,0.14,lum); if(a<0.08) discard; gl_FragColor=vec4(c.rgb,a);
+    }`,
   });
 }
 
@@ -163,14 +170,13 @@ function prop(tex, w, h, pos) {
   mesh.position.copy(pos);
   scene.add(mesh);
   facing.push(mesh);
-  return mesh;
 }
 
 function mkMat(map, opts = {}) {
   return new THREE.MeshStandardMaterial({
     map,
-    roughness: opts.roughness ?? 0.72,
-    metalness: opts.metalness ?? 0.18,
+    roughness: opts.roughness ?? 0.75,
+    metalness: opts.metalness ?? 0.15,
     emissive: opts.emissive ?? 0x000000,
     emissiveIntensity: opts.emissiveIntensity ?? 0,
   });
@@ -178,12 +184,10 @@ function mkMat(map, opts = {}) {
 
 function addIsland(x, z, r, h, mats) {
   const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 0.55, 20), mats.moss);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 0.55, 12), mats.moss);
   top.position.y = h;
-  top.receiveShadow = top.castShadow = true;
-  const body = new THREE.Mesh(new THREE.ConeGeometry(r * 0.95, h + 4, 12), mats.stone);
+  const body = new THREE.Mesh(new THREE.ConeGeometry(r * 0.95, h + 4, 8), mats.stone);
   body.position.y = h / 2 - 2.2;
-  body.castShadow = true;
   g.add(top, body);
   g.position.set(x, 0, z);
   scene.add(g);
@@ -194,10 +198,7 @@ function spawnMemory(pos, orbTex) {
   const s = glowSprite(orbTex, 1.15, 1.15);
   s.position.copy(pos);
   scene.add(s);
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.55, 0.035, 8, 24),
-    new THREE.MeshBasicMaterial({ color: 0xf0c36a })
-  );
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.035, 6, 16), new THREE.MeshBasicMaterial({ color: 0xf0c36a }));
   ring.position.copy(pos);
   scene.add(ring);
   memories.push({ mesh: s, ring, taken: false, base: pos.clone() });
@@ -210,18 +211,15 @@ function spawnWraith(pos, tex) {
   wraiths.push({ mesh: s, pos: pos.clone(), speed: 3.1 + Math.random() * 1.6 });
 }
 
-function spark(pos, color, n = 14) {
+function spark(pos, color, n = 8) {
   for (let i = 0; i < n; i++) {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06, 6, 6),
-      new THREE.MeshBasicMaterial({ color, transparent: true })
-    );
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 5, 5), new THREE.MeshBasicMaterial({ color, transparent: true }));
     m.position.copy(pos);
     scene.add(m);
     sparks.push({
       m,
       v: new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6),
-      life: 0.7,
+      life: 0.55,
     });
   }
 }
@@ -261,14 +259,14 @@ function bindStick() {
     const ny = (y / (Math.hypot(x, y) || 1)) * m;
     stick.x = nx;
     stick.y = ny;
-    knob.style.left = `${35 + nx * 28}px`;
-    knob.style.top = `${35 + ny * 28}px`;
+    knob.style.left = `${33 + nx * 26}px`;
+    knob.style.top = `${33 + ny * 26}px`;
   };
   const end = () => {
     stick.down = false;
     stick.x = stick.y = 0;
-    knob.style.left = '35px';
-    knob.style.top = '35px';
+    knob.style.left = '33px';
+    knob.style.top = '33px';
   };
   el.addEventListener('pointerdown', (e) => {
     el.setPointerCapture(e.pointerId);
@@ -296,65 +294,46 @@ document.getElementById('pulseBtn').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   firePulse();
 });
-
 bindStick();
 
-function tickClock() {
-  const d = new Date();
-  document.getElementById('clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-tickClock();
-setInterval(tickClock, 20000);
-
 async function boot() {
-  const pack = await Promise.all([
-    load('assets/tex_stone.jpg'),
-    load('assets/tex_wood.jpg'),
-    load('assets/tex_crystal.jpg'),
-    load('assets/tex_moss.jpg'),
-    load('assets/sky.jpg'),
-    load('assets/lantern_sprite.png'),
-    load('assets/memory_orb.png'),
-    load('assets/wraith.png'),
-    load('assets/portal.png'),
-    load('assets/tree.png'),
-    load('assets/rock.png'),
-    load('assets/banner.png'),
-    load('assets/shrine.png'),
-    load('assets/flower.png'),
-    load('assets/bridge.png'),
-    load('assets/weaver.png'),
-    load('assets/mote.png'),
-  ]);
-  const [
-    stone, wood, crystal, moss, sky, lanternTex, orbTex, wraithTex, portalTex,
-    treeTex, rockTex, bannerTex, shrineTex, flowerTex, bridgeTex, weaverTex, moteTex,
-  ] = pack;
+  const [stone, moss, sky, lanternTex, orbTex, wraithTex, portalTex, treeTex, rockTex, bridgeTex, weaverTex, moteTex] =
+    await loadAll([
+      'assets/tex_stone.jpg',
+      'assets/tex_moss.jpg',
+      'assets/sky.jpg',
+      'assets/lantern_sprite.png',
+      'assets/memory_orb.png',
+      'assets/wraith.png',
+      'assets/portal.png',
+      'assets/tree.png',
+      'assets/rock.png',
+      'assets/bridge.png',
+      'assets/weaver.png',
+      'assets/mote.png',
+    ]);
 
-  [stone, wood, crystal, moss].forEach((t) => {
+  [stone, moss].forEach((t) => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(2, 2);
   });
 
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(160, 32, 24), new THREE.MeshBasicMaterial({ map: sky, side: THREE.BackSide })));
-  scene.add(new THREE.HemisphereLight(0x6aa0c8, 0x1a1008, 0.55));
-  const moon = new THREE.DirectionalLight(0xc8d8ff, 0.7);
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(140, 20, 14), new THREE.MeshBasicMaterial({ map: sky, side: THREE.BackSide })));
+  scene.add(new THREE.HemisphereLight(0x6aa0c8, 0x1a1008, 0.6));
+  const moon = new THREE.DirectionalLight(0xc8d8ff, 0.75);
   moon.position.set(-20, 40, -10);
-  moon.castShadow = true;
   scene.add(moon);
 
-  lanternLight = new THREE.PointLight(0xffc56a, 8, 22, 1.4);
+  lanternLight = new THREE.PointLight(0xffc56a, 8, 20, 1.4);
   scene.add(lanternLight);
 
   const mats = {
     stone: mkMat(stone, { roughness: 0.86 }),
-    wood: mkMat(wood),
     moss: mkMat(moss, { roughness: 0.9 }),
-    crystal: mkMat(crystal, { roughness: 0.25, metalness: 0.55, emissive: 0x332255, emissiveIntensity: 0.35 }),
   };
 
   const water = new THREE.Mesh(
-    new THREE.CircleGeometry(90, 48),
+    new THREE.CircleGeometry(80, 32),
     new THREE.MeshStandardMaterial({ color: 0x0a1c28, metalness: 0.85, roughness: 0.18, transparent: true, opacity: 0.72 })
   );
   water.rotation.x = -Math.PI / 2;
@@ -377,8 +356,7 @@ async function boot() {
     const A = isles[a], B = isles[b];
     const mid = new THREE.Vector3((A.x + B.x) / 2, (A.h + B.h) / 2 + 1.15, (A.z + B.z) / 2);
     const dx = B.x - A.x, dz = B.z - A.z;
-    const len = Math.hypot(dx, dz);
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(len * 0.92, 2.4), cutoutMat(bridgeTex));
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(Math.hypot(dx, dz) * 0.92, 2.4), cutoutMat(bridgeTex));
     mesh.position.copy(mid);
     mesh.rotation.y = Math.atan2(dx, dz);
     scene.add(mesh);
@@ -388,9 +366,6 @@ async function boot() {
     const a = i * 1.7;
     prop(treeTex, 3.6, 4.8, new THREE.Vector3(isle.x + Math.cos(a) * isle.r * 0.4, isle.h + 2.5, isle.z + Math.sin(a) * isle.r * 0.4));
     prop(rockTex, 2.1, 1.7, new THREE.Vector3(isle.x + isle.r * 0.35, isle.h + 0.95, isle.z - isle.r * 0.2));
-    prop(flowerTex, 1.1, 1.4, new THREE.Vector3(isle.x - isle.r * 0.28, isle.h + 1.0, isle.z + isle.r * 0.18));
-    if (i % 2 === 0) prop(bannerTex, 1.2, 2.6, new THREE.Vector3(isle.x + 1.1, isle.h + 2.0, isle.z + 0.7));
-    if (i) prop(shrineTex, 1.8, 2.2, new THREE.Vector3(isle.x, isle.h + 1.35, isle.z - 0.5));
   });
 
   const portal = glowSprite(portalTex, 5.6, 5.6);
@@ -406,7 +381,7 @@ async function boot() {
   scene.add(playerGroup);
 
   pulseMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 20, 16),
+    new THREE.SphereGeometry(1, 14, 10),
     new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0, side: THREE.DoubleSide })
   );
   scene.add(pulseMesh);
@@ -419,7 +394,7 @@ async function boot() {
     const a = (i / 6) * Math.PI * 2;
     spawnWraith(new THREE.Vector3(Math.cos(a) * 28, 4, Math.sin(a) * 28), wraithTex);
   }
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0; i < 16; i++) {
     const mote = glowSprite(moteTex, 0.55, 0.55);
     mote.position.set((Math.random() - 0.5) * 60, 2 + Math.random() * 10, (Math.random() - 0.5) * 60);
     scene.add(mote);
@@ -428,7 +403,7 @@ async function boot() {
   state.ready = true;
   startBtn.disabled = false;
   startBtn.textContent = 'WAKE THE LANTERN';
-  loadNote.textContent = 'Ready · WASD or stick · Jump · Dash · Pulse';
+  loadNote.textContent = 'Ready · stick or WASD · Jump · Dash · Pulse';
   fit();
   loop();
 }
@@ -477,7 +452,7 @@ function loop() {
   const camOff = new THREE.Vector3(Math.sin(player.yaw) * 7.4, 3.2, Math.cos(player.yaw) * 7.4);
   camera.position.lerp(player.pos.clone().add(camOff), 1 - Math.pow(0.001, dt));
   camera.lookAt(player.pos.x, player.pos.y + 1.0, player.pos.z);
-  renderer.render(scene, camera);
+  if (state.playing || !stage.classList.contains('hidden')) renderer.render(scene, camera);
   setHud();
 }
 
@@ -531,7 +506,7 @@ function updateWorld(dt) {
       state.comboT = 6;
       state.score += 400 * state.combo;
       state.hp = Math.min(100, state.hp + 8);
-      spark(m.mesh.position, 0xf0c36a, 18);
+      spark(m.mesh.position, 0xf0c36a, 12);
       beep(660, 0.15, 'sine', 0.07);
     }
   });
@@ -544,7 +519,7 @@ function updateWorld(dt) {
     if (state.pulse > 0.4 && d < 7.5) {
       w.pos.addScaledVector(to, -8);
       state.score += 80 * state.combo;
-      spark(w.pos, 0x7ee0d0, 6);
+      spark(w.pos, 0x7ee0d0, 5);
     }
     if (d < 1.35 && player.invuln <= 0 && state.playing) {
       state.hp -= 14;
@@ -569,6 +544,6 @@ boot().catch((err) => {
   console.error(err);
   startBtn.disabled = false;
   startBtn.textContent = 'RETRY';
-  loadNote.textContent = 'Could not load assets — check the server, then tap retry.';
+  loadNote.textContent = 'Could not finish loading. Tap retry.';
   startBtn.onclick = () => location.reload();
 });

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#05080d" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
+  <title>LUMENWAKE</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
   <link rel="preload" href="assets/title_art.jpg" as="image" />
@@ -14,7 +15,7 @@
 </head>
 <body>
   <div id="rotate">
-    <img src="assets/ui_logo.png" alt="" />
+    <img src="assets/ui_logo.jpg" alt="" />
     <p>Turn your device <b>landscape</b></p>
   </div>
 
@@ -25,10 +26,10 @@
       <img class="splash-art" src="assets/title_art.jpg" alt="" />
       <div class="splash-veil"></div>
       <div class="splash-copy">
-        <img class="logo-lg" src="assets/ui_logo.png" alt="" />
+        <img class="logo-lg" src="assets/ui_logo.jpg" alt="" />
         <p class="kicker">Reverie Hacks 2026</p>
         <h1>LUMENWAKE</h1>
-        <p class="line">A dream is dying.</p>
+        <p class="line">A dream is dying. Run.</p>
         <div class="loadbox">
           <div class="loadbar"><span id="loadFill"></span></div>
           <p id="loadText">Waking the lantern… 0%</p>
@@ -41,55 +42,57 @@
       <div class="splash-veil"></div>
       <div class="menu-row">
         <div class="menu-card">
-          <img class="logo-md" src="assets/ui_logo.png" alt="" />
+          <img class="logo-md" src="assets/ui_logo.jpg" alt="" />
           <h2>LUMENWAKE</h2>
-          <p class="tag">The last lantern that still remembers dawn.</p>
-          <p class="lore">Seven memories. Night Wraiths. Pulse your light before Reverie forgets its name.</p>
-          <button type="button" id="playBtn">ENTER THE DREAM</button>
+          <p class="tag">The road of Reverie never stops.</p>
+          <p class="lore">You auto-run. The Night Wraith is behind you. Swipe the dream and don’t look back.</p>
+          <button type="button" id="playBtn">RUN</button>
         </div>
         <ul class="how">
-          <li><b>Move</b> stick or WASD</li>
-          <li><b>Jump</b> pad or Space</li>
-          <li><b>Dash</b> pad or Shift</li>
-          <li><b>Pulse</b> to banish wraiths</li>
-          <li><b>Win</b> collect 7 memories</li>
+          <li><b>← →</b> change lane · swipe</li>
+          <li><b>↑</b> jump · swipe up / Space</li>
+          <li><b>↓</b> slide · swipe down</li>
+          <li><b>Turn</b> swipe at a bend or fall</li>
+          <li><b>Survive</b> the wraith is faster if you stumble</li>
         </ul>
       </div>
     </section>
 
     <div id="hud" class="hidden">
       <div class="brand">
-        <img src="assets/ui_logo.png" alt="" />
+        <img src="assets/ui_logo.jpg" alt="" />
         <div>
           <div class="title">LUMENWAKE</div>
-          <div class="sub">Last Lucid Light</div>
+          <div class="sub">Don’t look back</div>
         </div>
       </div>
       <div class="meters">
         <div class="hp-row"><img src="assets/heart.jpg" alt="" /><div class="bar"><span id="hpFill"></span></div></div>
         <div class="meta">
-          <span>MEM <b id="memCount">0</b>/7</span>
+          <span>DIST <b id="dist">0</b>m</span>
+          <span>MEM <b id="memCount">0</b></span>
           <span>SCR <b id="score">0</b></span>
-          <span>CMB <b id="combo">x1</b></span>
         </div>
       </div>
     </div>
 
     <div id="pads" class="hidden">
-      <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+      <div class="lane-btns">
+        <button type="button" class="pad" id="leftBtn">←</button>
+        <button type="button" class="pad" id="rightBtn">→</button>
+      </div>
       <div class="actions">
-        <button type="button" class="pad" id="dashBtn">DASH</button>
+        <button type="button" class="pad" id="slideBtn">SLIDE</button>
         <button type="button" class="pad gold" id="jumpBtn">JUMP</button>
-        <button type="button" class="pad pulse" id="pulseBtn">PULSE</button>
       </div>
     </div>
 
     <section id="end" class="layer hidden">
       <div class="menu-card">
-        <h2 id="endTitle">DAWN</h2>
+        <h2 id="endTitle">CAUGHT</h2>
         <p id="endText"></p>
         <p class="scoreline">Final score <b id="endScore">0</b></p>
-        <button type="button" id="againBtn">DREAM AGAIN</button>
+        <button type="button" id="againBtn">RUN AGAIN</button>
       </div>
     </section>
   </div>

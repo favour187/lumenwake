@@ -82,15 +82,7 @@ button#playBtn, button#againBtn {
   z-index: 6; display: flex; justify-content: space-between; align-items: flex-end;
   padding: 0 22px 8px; pointer-events: none;
 }
-.stick {
-  width: 120px; height: 120px; border-radius: 50%;
-  background: #ffffff12; border: 1px solid #f0c36a44;
-  pointer-events: auto; position: relative; touch-action: none;
-}
-.knob {
-  width: 48px; height: 48px; border-radius: 50%;
-  background: #f0c36acc; position: absolute; left: 36px; top: 36px;
-}
+.lane-btns { display: flex; gap: 10px; pointer-events: auto; }
 .actions { display: flex; gap: 10px; pointer-events: auto; }
 .pad {
   width: 70px; height: 70px; border-radius: 50%;

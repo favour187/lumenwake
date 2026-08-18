@@ -123,8 +123,27 @@ function beep(freq, dur, type = 'sine', gain = 0.06) {
   o.stop(audioCtx.currentTime + dur);
 }
 
+function goFullscreen() {
+  const el = document.documentElement;
+  const req =
+    el.requestFullscreen ||
+    el.webkitRequestFullscreen ||
+    el.mozRequestFullScreen ||
+    el.msRequestFullscreen;
+  if (req) {
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      if (p && p.catch) p.catch(() => {});
+    } catch {}
+  }
+  try {
+    screen.orientation?.lock?.('landscape').catch(() => {});
+  } catch {}
+}
+
 function startGame() {
   if (!state.ready || state.playing) return;
+  goFullscreen();
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume?.();
@@ -133,7 +152,8 @@ function startGame() {
   menu.classList.add('hidden');
   hud.classList.remove('hidden');
   padsEl.classList.remove('hidden');
-  fit();
+  setTimeout(fit, 80);
+  setTimeout(fit, 300);
   state.playing = true;
   beep(220, 0.35, 'triangle', 0.05);
 }
@@ -549,11 +569,5 @@ function updateWorld(dt) {
 
 boot().catch((err) => {
   console.error(err);
-  startBtn.disabled = false;
-  startBtn.textContent = 'RETRY';
-  loadNote.textContent = 'Could not finish loading. Tap retry.';
-  startBtn.onclick = () => location.reload();
-});
-ot finish loading. Tap retry.';
-  startBtn.onclick = () => location.reload();
+  if (loadText) loadText.textContent = 'Could not load. Refresh.';
 });

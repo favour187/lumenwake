@@ -8,7 +8,23 @@ A third-person 3D action-adventure in the dying dream-city of Reverie. You are t
 
 The hackathon is named *Reverie*. The game *is* a reverie: a lucid dream you can lose. Original generated textures (stone, moss, crystal, wood, sky, lantern, wraiths, orbs, portal, emblem) — no stock asset packs. Playable in one click in the browser.
 
-## Play
+## Live on Render
+
+This repo is set up as a **Render static site** (`render.yaml`).
+
+**One-click:** [Deploy to Render](https://render.com/deploy?repo=https://github.com/favour187/lumenwake)
+
+Or by hand:
+
+1. Open [dashboard.render.com](https://dashboard.render.com) and sign in (GitHub is fine).
+2. **New** → **Blueprint** (or **Static Site**).
+3. Connect **favour187/lumenwake**, branch `main`.
+4. Publish directory: `.` · Build command can stay empty / `echo "LUMENWAKE static"`.
+5. Create. URL will be `https://lumenwake.onrender.com` (or a unique suffix if that name is taken).
+
+Free static sites sleep less than web services and are the right fit here (HTML + JS + images, no Node server).
+
+## Play locally
 
 Open `index.html` via a local static server (required for ES modules):
 

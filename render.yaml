@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lumenwake
+    runtime: static
+    plan: free
+    buildCommand: echo "LUMENWAKE static"
+    staticPublishPath: ./
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=300

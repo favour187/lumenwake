@@ -10,94 +10,89 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="rotate">
+    <img src="assets/ui_logo.png" alt="" />
+    <p>Turn your device <b>landscape</b></p>
+  </div>
+
   <div id="app">
+    <canvas id="c"></canvas>
+
     <section id="splash" class="layer">
-      <div class="splash-inner">
-        <p class="kicker">Reverie Hacks 2026 presents</p>
-        <img src="assets/ui_logo.png" class="splash-logo" alt="" />
+      <img class="splash-art" src="assets/title_art.jpg" alt="" />
+      <div class="splash-veil"></div>
+      <div class="splash-copy">
+        <img class="logo-lg" src="assets/ui_logo.png" alt="" />
+        <p class="kicker">Reverie Hacks 2026</p>
         <h1>LUMENWAKE</h1>
-        <p class="tagline">Before the dream forgets its name.</p>
-        <button type="button" id="enterBtn">ENTER THE DREAM</button>
+        <p class="line">A dream is dying.</p>
+        <div class="loadbox">
+          <div class="loadbar"><span id="loadFill"></span></div>
+          <p id="loadText">Waking the lantern… 0%</p>
+        </div>
       </div>
     </section>
 
     <section id="menu" class="layer hidden">
-      <img class="hero" src="assets/title_art.jpg" alt="" />
-      <div class="vignette"></div>
-      <div class="card">
-        <img class="logo" src="assets/ui_logo.png" alt="" />
-        <h1>LUMENWAKE</h1>
-        <p class="tag">The last lantern that still remembers dawn.</p>
-        <p class="lore">Seven floating isles. Seven stolen memories. Pulse your light and keep Reverie awake.</p>
-        <div class="loadbox">
-          <div class="track"><span id="loadBar"></span></div>
-          <p class="fine" id="loadNote">Weaving the isles…</p>
+      <img class="splash-art" src="assets/title_art.jpg" alt="" />
+      <div class="splash-veil"></div>
+      <div class="menu-row">
+        <div class="menu-card">
+          <img class="logo-md" src="assets/ui_logo.png" alt="" />
+          <h2>LUMENWAKE</h2>
+          <p class="tag">The last lantern that still remembers dawn.</p>
+          <p class="lore">Seven memories. Night Wraiths. Pulse your light before Reverie forgets its name.</p>
+          <button type="button" id="playBtn">ENTER THE DREAM</button>
         </div>
-        <button type="button" id="startBtn" disabled>WAKE THE LANTERN</button>
+        <ul class="how">
+          <li><b>Move</b> stick or WASD</li>
+          <li><b>Jump</b> pad or Space</li>
+          <li><b>Dash</b> pad or Shift</li>
+          <li><b>Pulse</b> to banish wraiths</li>
+          <li><b>Win</b> collect 7 memories</li>
+        </ul>
       </div>
     </section>
 
-    <section id="stage" class="layer hidden">
-      <canvas id="c"></canvas>
-      <div id="hud">
-        <div class="brand">
-          <img src="assets/ui_logo.png" alt="" />
-          <div>
-            <div class="title">LUMENWAKE</div>
-            <div class="sub">Last Lucid Light</div>
-          </div>
-        </div>
-        <div class="meters">
-          <div class="hp-row"><img src="assets/heart.png" alt="" /><div class="bar"><span id="hpFill"></span></div></div>
-          <div class="meta">
-            <span>MEM <b id="memCount">0</b>/7</span>
-            <span>SCR <b id="score">0</b></span>
-            <span>CMB <b id="combo">x1</b></span>
-          </div>
+    <div id="hud" class="hidden">
+      <div class="brand">
+        <img src="assets/ui_logo.png" alt="" />
+        <div>
+          <div class="title">LUMENWAKE</div>
+          <div class="sub">Last Lucid Light</div>
         </div>
       </div>
-      <div id="pads">
-        <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
-        <div class="actions">
-          <button type="button" class="pad" id="dashBtn">DASH</button>
-          <button type="button" class="pad gold" id="jumpBtn">JUMP</button>
-          <button type="button" class="pad pulse" id="pulseBtn">PULSE</button>
+      <div class="meters">
+        <div class="hp-row"><img src="assets/heart.png" alt="" /><div class="bar"><span id="hpFill"></span></div></div>
+        <div class="meta">
+          <span>MEM <b id="memCount">0</b>/7</span>
+          <span>SCR <b id="score">0</b></span>
+          <span>CMB <b id="combo">x1</b></span>
         </div>
       </div>
-      <div id="end" class="layer hidden">
-        <div class="card">
-          <h1 id="endTitle">DAWN</h1>
-          <p id="endText"></p>
-          <p class="scoreline">Final score <b id="endScore">0</b></p>
-          <button type="button" id="againBtn">DREAM AGAIN</button>
-        </div>
-      </div>
-    </section>
-
-    <div id="rotate" class="layer hidden">
-      <p>Turn your device sideways</p>
-      <span>LUMENWAKE plays in landscape</span>
     </div>
+
+    <div id="pads" class="hidden">
+      <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+      <div class="actions">
+        <button type="button" class="pad" id="dashBtn">DASH</button>
+        <button type="button" class="pad gold" id="jumpBtn">JUMP</button>
+        <button type="button" class="pad pulse" id="pulseBtn">PULSE</button>
+      </div>
+    </div>
+
+    <section id="end" class="layer hidden">
+      <div class="menu-card">
+        <h2 id="endTitle">DAWN</h2>
+        <p id="endText"></p>
+        <p class="scoreline">Final score <b id="endScore">0</b></p>
+        <button type="button" id="againBtn">DREAM AGAIN</button>
+      </div>
+    </section>
   </div>
 
-  <script>
-    const splash = document.getElementById('splash');
-    const menu = document.getElementById('menu');
-    const rotate = document.getElementById('rotate');
-    document.getElementById('enterBtn').addEventListener('click', () => {
-      splash.classList.add('hidden');
-      menu.classList.remove('hidden');
-    });
-    function checkOrient() {
-      const tall = innerHeight > innerWidth + 40;
-      rotate.classList.toggle('hidden', !tall);
-    }
-    checkOrient();
-    addEventListener('resize', checkOrient);
-    addEventListener('orientationchange', checkOrient);
-  </script>
   <script type="importmap">
-  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+  { "imports": { "three": "https://unpkg.com/three@0.169.0/build/three.module.js" } }
   </script>
   <script type="module" src="game.js"></script>
 </body>

@@ -1,15 +1,17 @@
 import * as THREE from 'three';
 
 const canvas = document.getElementById('c');
-const stage = document.getElementById('stage');
-const startBtn = document.getElementById('startBtn');
+const splash = document.getElementById('splash');
+const menu = document.getElementById('menu');
+const hud = document.getElementById('hud');
+const padsEl = document.getElementById('pads');
+const playBtn = document.getElementById('playBtn');
 const againBtn = document.getElementById('againBtn');
-const loadNote = document.getElementById('loadNote');
-const loadBar = document.getElementById('loadBar');
+const loadText = document.getElementById('loadText');
+const loadFill = document.getElementById('loadFill');
 
 function sizeOf() {
-  const r = stage.getBoundingClientRect();
-  return { w: Math.max(2, r.width || innerWidth), h: Math.max(2, r.height || innerHeight) };
+  return { w: Math.max(2, innerWidth), h: Math.max(2, innerHeight) };
 }
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 900;
@@ -59,8 +61,8 @@ const TOTAL = 12;
 function tickLoad() {
   done += 1;
   const pct = Math.min(100, Math.round((done / TOTAL) * 100));
-  loadBar.style.width = pct + '%';
-  loadNote.textContent = pct < 100 ? `Weaving the isles… ${pct}%` : 'Ready';
+  loadFill.style.width = pct + '%';
+  loadText.textContent = pct < 100 ? `Waking the lantern… ${pct}%` : 'Ready';
 }
 
 async function loadAll(paths) {
@@ -127,14 +129,16 @@ function startGame() {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume?.();
   } catch {}
-  document.getElementById('menu').classList.add('hidden');
-  stage.classList.remove('hidden');
+  splash.classList.add('hidden');
+  menu.classList.add('hidden');
+  hud.classList.remove('hidden');
+  padsEl.classList.remove('hidden');
   fit();
   state.playing = true;
   beep(220, 0.35, 'triangle', 0.05);
 }
 
-startBtn.addEventListener('click', (e) => {
+playBtn.addEventListener('click', (e) => {
   e.preventDefault();
   startGame();
 });
@@ -401,11 +405,14 @@ async function boot() {
   }
 
   state.ready = true;
-  startBtn.disabled = false;
-  startBtn.textContent = 'WAKE THE LANTERN';
-  loadNote.textContent = 'Ready · stick or WASD · Jump · Dash · Pulse';
+  loadFill.style.width = '100%';
+  loadText.textContent = 'Ready';
   fit();
   loop();
+  setTimeout(() => {
+    splash.classList.add('hidden');
+    menu.classList.remove('hidden');
+  }, 400);
 }
 
 function groundY(x, z) {
@@ -452,7 +459,7 @@ function loop() {
   const camOff = new THREE.Vector3(Math.sin(player.yaw) * 7.4, 3.2, Math.cos(player.yaw) * 7.4);
   camera.position.lerp(player.pos.clone().add(camOff), 1 - Math.pow(0.001, dt));
   camera.lookAt(player.pos.x, player.pos.y + 1.0, player.pos.z);
-  if (state.playing || !stage.classList.contains('hidden')) renderer.render(scene, camera);
+  renderer.render(scene, camera);
   setHud();
 }
 
